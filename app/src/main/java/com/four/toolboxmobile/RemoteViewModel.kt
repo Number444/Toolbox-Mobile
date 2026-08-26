@@ -102,6 +102,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     private var scanJob: Job? = null
     private var pollJob: Job? = null
+    private var lastProgressEmit = 0L
     private val flashSeq = AtomicLong(0)
     private val uploadSeq = AtomicLong(0)
 
@@ -115,6 +116,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     fun startScan() {
         scanJob?.cancel()
         pollJob?.cancel()
+        lastProgressEmit = 0L
         _uiState.value = ConnUiState.Scanning(0, 254, null, emptyList())
         scanJob = viewModelScope.launch {
             val prefix = LanScanner.localIpv4Prefix()
@@ -123,6 +125,11 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             val found = LanScanner.scanSubnet(prefix) { scanned, total, f ->
+                // 节流：254 次探测回调若全部直通 StateFlow，会在 1 秒内触发 254 次整页重组，
+                // 此时滑动必掉帧。限 80ms 一次（最后一次必发），重组降到约 12 次。
+                val now = System.currentTimeMillis()
+                if (scanned < total && now - lastProgressEmit < 80) return@scanSubnet
+                lastProgressEmit = now
                 // 回调发生在 IO 线程，StateFlow 赋值线程安全
                 val cur = _uiState.value
                 if (cur is ConnUiState.Scanning) {

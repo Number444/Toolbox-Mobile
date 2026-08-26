@@ -120,14 +120,28 @@ fun RemotePage(viewModel: RemoteViewModel) {
             is ConnUiState.Scanning -> {
                 ScanCard(s)
                 if (s.found.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    DevicePickCard(s.found, onSelect = viewModel::connect)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FoundHeader(count = s.found.size)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    s.found.forEach { ip ->
+                        DeviceCard(ip, onConnect = { viewModel.connect(ip) })
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
 
             is ConnUiState.DevicesFound -> {
-                DevicePickCard(s.found, onSelect = viewModel::connect)
-                Spacer(modifier = Modifier.height(12.dp))
+                if (s.found.isEmpty()) {
+                    EmptyScanCard()
+                } else {
+                    FoundHeader(count = s.found.size)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    s.found.forEach { ip ->
+                        DeviceCard(ip, onConnect = { viewModel.connect(ip) })
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 GhostButton(text = "🔄 重新扫描", onClick = viewModel::startScan)
             }
 
@@ -264,6 +278,7 @@ private fun ConnectedPanel(s: ConnUiState.Connected, vm: RemoteViewModel) {
         Divider()
 
         var minutes by remember { mutableStateOf("") }
+        // 输入行与按钮行分离：窄屏上单行放不下"输入框+双按钮"，会把占位文字挤成竖排
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -278,8 +293,11 @@ private fun ConnectedPanel(s: ConnUiState.Connected, vm: RemoteViewModel) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 colors = darkFieldColors(),
             )
-            AccentButton("🔌 定时关机", { vm.customShutdown(minutes) })
-            DangerButton("🛑 取消", { vm.quick("cancel_shutdown") })
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AccentButton("🔌 定时关机", { vm.customShutdown(minutes) }, Modifier.weight(1f))
+            DangerButton("🛑 取消关机", { vm.quick("cancel_shutdown") }, Modifier.weight(1f))
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -532,37 +550,91 @@ private fun ScanCard(s: ConnUiState.Scanning) {
     }
 }
 
-/** 扫描阶段的待选设备列表卡片：点选即连 */
+/** 发现设备的分区标题：明确告知"点击连接"，补足引导性 */
 @Composable
-private fun DevicePickCard(found: List<String>, onSelect: (String) -> Unit) {
-    ToolboxCard {
-        CardTitle("🖥️ 发现的设备")
-        if (found.isEmpty()) {
+private fun FoundHeader(count: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(ToolboxColors.Accent),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "已发现 $count 台设备 · 点击连接",
+            color = ToolboxColors.Accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/** 设备卡片：图标 + IP/端口 + 实心"连接"按钮（整卡也可点），引导性明确的现代列表项 */
+@Composable
+private fun DeviceCard(ip: String, onConnect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(ToolboxColors.Card)
+            .border(
+                width = 1.dp,
+                color = ToolboxColors.Text.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onConnect)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 图标底座：淡绿圆角方块
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(ToolboxColors.Accent.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "🖥️", fontSize = 18.sp)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = ip, color = ToolboxColors.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "未发现 Toolbox 设备。请确认电脑端 Toolbox 已启动、远程控制已开启，且与本机处于同一局域网。",
+                text = "端口 ${LanScanner.DEFAULT_PORT} · Toolbox 服务端",
+                color = ToolboxColors.TextDim,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        AccentButton(text = "连接", onClick = onConnect)
+    }
+}
+
+/** 扫描完成但无设备的空态卡片：大图标 + 说明 + 排查提示 */
+@Composable
+private fun EmptyScanCard() {
+    ToolboxCard {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(text = "📡", fontSize = 34.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "未发现 Toolbox 设备",
+                color = ToolboxColors.Text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "请确认：\n· 电脑端 Toolbox 已启动，远程控制已开启\n· 手机与电脑连接同一局域网",
                 color = ToolboxColors.TextDim,
                 fontSize = 13.sp,
+                lineHeight = 20.sp,
             )
-        } else {
-            found.forEachIndexed { index, ip ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { onSelect(ip) }
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(text = "🟢", fontSize = 12.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "$ip:${LanScanner.DEFAULT_PORT}",
-                        color = ToolboxColors.Text,
-                        fontSize = 14.sp,
-                    )
-                }
-                if (index < found.lastIndex) ThinDivider()
-            }
         }
     }
 }
