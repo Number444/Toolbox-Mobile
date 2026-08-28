@@ -81,3 +81,15 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }
+
+// 发布产物出口：assembleRelease 完成后自动复制到 Agent Space 专用文件夹，
+// 文件名带版本号，避免反复覆盖（AGP 8 不再支持直接改 APK 输出目录，用导出任务替代）
+tasks.register<Copy>("exportReleaseApk") {
+    val versionName = android.defaultConfig.versionName
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    into("C:/Agent Space/ToolboxMobile-Releases")
+    rename { "ToolboxMobile-v$versionName-release.apk" }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy("exportReleaseApk")
+}
