@@ -12,13 +12,24 @@ android {
         applicationId = "com.four.toolboxmobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
+    }
+
+    // Release 签名：密钥库在仓库根目录（git 忽略），密码在 ~/.gradle/gradle.properties
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("toolbox.keystore")
+            storePassword = findProperty("TOOLBOX_STORE_PASSWORD") as String?
+            keyAlias = "toolbox"
+            keyPassword = findProperty("TOOLBOX_KEY_PASSWORD") as String?
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

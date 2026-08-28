@@ -11,3 +11,6 @@
 local.properties
 
 .kotlin/
+
+# 发布签名密钥库（密码在 ~/.gradle/gradle.properties）
+*.keystore
