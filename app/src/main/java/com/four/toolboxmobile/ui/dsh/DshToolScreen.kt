@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -77,7 +78,10 @@ fun DshToolScreen(onClose: () -> Unit, viewModel: DshViewModel = viewModel()) {
     LaunchedEffect(Unit) { viewModel.start() }
 
     Box(modifier = Modifier.fillMaxSize().background(ToolboxColors.Bg)) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        // imePadding：edge-to-edge 下系统不再为输入法压缩窗口（adjustResize 失效），
+        // 必须手动消费 WindowInsets.ime——键盘弹出时整列缩进，WebView 视口随之变矮，
+        // Chromium 会自动把聚焦的输入框滚进可视区（绑定页 TextField 同理受益）
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
             DshTopBar(
                 state = state,
                 onBack = onClose,
