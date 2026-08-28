@@ -34,6 +34,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -129,9 +131,16 @@ fun BottomNavBar(
                             fallbackTint = HazeTint(ToolboxColors.Card.copy(alpha = 0.85f)),
                         ),
                     )
+                    // 玻璃边缘高光（对齐小米桌面小组件质感）：
+                    // 渐变描边——上缘最亮 → 两侧过渡 → 下缘几乎不可见；
+                    // 只描边、不向栏内扩散
                     .border(
                         width = 1.dp,
-                        color = ToolboxColors.Text.copy(alpha = 0.06f),
+                        brush = Brush.verticalGradient(
+                            0.0f to Color.White.copy(alpha = 0.22f),
+                            0.35f to Color.White.copy(alpha = 0.10f),
+                            1.0f to Color.White.copy(alpha = 0.03f),
+                        ),
                         shape = RoundedCornerShape(20.dp),
                     ),
             )

@@ -341,13 +341,22 @@ private fun ConnectedPanel(s: ConnUiState.Connected, vm: RemoteViewModel) {
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // 关闭 Toolbox（红色，确认后关闭进程）
-    DangerButton("关闭 Toolbox", onClick = vm::requestShutdownApp)
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    // 断开当前连接
-    GhostButton(text = "断开连接", onClick = vm::disconnect)
+    // 收尾操作：断开连接（安全，居左）+ 关闭 Toolbox（危险，居右），等宽同高成对排布
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        GhostButton(
+            text = "断开连接",
+            onClick = vm::disconnect,
+            modifier = Modifier.weight(1f).height(46.dp),
+        )
+        DangerButton(
+            "关闭 Toolbox",
+            onClick = vm::requestShutdownApp,
+            modifier = Modifier.weight(1f).height(46.dp),
+        )
+    }
 }
 
 // ==================== 面板子组件 ====================
@@ -815,7 +824,7 @@ private fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier =
     }
 }
 
-/** 实心红按钮（危险操作，对齐 HTML button.danger） */
+/** 实心红按钮（危险操作，对齐 HTML button.danger；红底白字保证对比度） */
 @Composable
 private fun DangerButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Button(
@@ -824,10 +833,10 @@ private fun DangerButton(text: String, onClick: () -> Unit, modifier: Modifier =
         shape = RoundedCornerShape(6.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = ToolboxColors.Danger,
-            contentColor = ToolboxColors.OnAccent,
+            contentColor = ToolboxColors.Text,
         ),
     ) {
-        Text(text = text, fontSize = 13.sp, maxLines = 1)
+        Text(text = text, fontSize = 14.sp, maxLines = 1)
     }
 }
 

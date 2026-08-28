@@ -12,8 +12,8 @@ android {
         applicationId = "com.four.toolboxmobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -36,6 +36,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true // BuildConfig.DEBUG 控制 WebView 远程调试开关
     }
 }
 
@@ -48,6 +49,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
 
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0") // DayNight 强制夜间模式 → WebView 上报 prefers-color-scheme: dark
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
@@ -57,4 +59,14 @@ dependencies {
 
     // 底栏毛玻璃：Android 12+ 真模糊，低版本自动降级半透明
     implementation("dev.chrisbanes.haze:haze:1.2.2")
+
+    // DSH 远程工具：文档起始脚本（强制 prefers-color-scheme: dark，让 DSH GUI 切原生深色主题）
+    implementation("androidx.webkit:webkit:1.10.0")
+
+    // DSH 扫码绑定：CameraX 预览 + ML Kit 二维码识别（模型内置，离线可用）
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }
