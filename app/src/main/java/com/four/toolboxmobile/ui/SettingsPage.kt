@@ -1,8 +1,13 @@
 package com.four.toolboxmobile.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,10 +31,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +46,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.four.toolboxmobile.BuildConfig
 import com.four.toolboxmobile.DshStore
@@ -46,7 +54,11 @@ import com.four.toolboxmobile.DshViewModel
 import com.four.toolboxmobile.ui.components.ToolboxConfirmDialog
 import com.four.toolboxmobile.ui.components.ToolboxDropdownItem
 import com.four.toolboxmobile.ui.components.ToolboxDropdownPopup
+import com.four.toolboxmobile.ui.components.ToolboxUpdateDialog
 import com.four.toolboxmobile.ui.theme.ToolboxColors
+import com.four.toolboxmobile.updater.AppUpdater
+import com.four.toolboxmobile.updater.AppUpdater.UpdateState
+import kotlinx.coroutines.launch
 
 /** 设置页键名（MainScreen 读取同一键决定初始页） */
 private const val PREFS_NAME = "settings"
@@ -76,6 +88,48 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
     val dshState by dshViewModel.state.collectAsState()
     LaunchedEffect(dshState) { dshBinding = dshStore.load() }
     var showClearDshDialog by remember { mutableStateOf(false) }
+
+    // 应用内更新：进入设置页自动检查一次；点击行/对话框驱动后续动作
+    val coroutineScope = rememberCoroutineScope()
+    val updateState by AppUpdater.state.collectAsState()
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showInstallDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { AppUpdater.check(context.applicationContext, force = false) }
+
+    // API 26~28 下载前缺存储权限：先申请，授予后直接续跑下载（29+ 走 MediaStore 不会触发）；
+    // 拒绝时落 Failed 态并重开对话框给出可见反馈（防「点了没反应」）
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            AppUpdater.download(context)
+        } else {
+            AppUpdater.notifyStoragePermissionDenied()
+            showUpdateDialog = true
+        }
+    }
+    val startDownload = {
+        if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            AppUpdater.download(context)
+        }
+    }
+    // 拉起系统安装器；未获「安装未知应用」授权时先引导去系统设置页（HyperOS 入口很深）
+    val startInstall: (UpdateState.Downloaded) -> Unit = { d ->
+        if (AppUpdater.canInstall(context)) {
+            try {
+                context.startActivity(AppUpdater.installIntent(d.uri))
+            } catch (e: ActivityNotFoundException) {
+                // 理论上必有安装器，兜底不崩
+            }
+        } else {
+            context.startActivity(AppUpdater.unknownSourcesSettingsIntent(context))
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -144,10 +198,36 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
                 value = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                 onClick = null,
             )
+            // 应用内更新：进入页面自动检查一次（AppUpdater 运行期缓存）；有新版/可安装时绿色高亮
+            val recheck: () -> Unit = {
+                coroutineScope.launch { AppUpdater.check(context.applicationContext, force = true) }
+            }
+            val (updateValue, updateColor, updateClick) = when (val s = updateState) {
+                is UpdateState.Idle, is UpdateState.Checking ->
+                    Triple("检查中…", ToolboxColors.TextDim, null)
+                is UpdateState.UpToDate ->
+                    Triple("已是最新", ToolboxColors.TextDim, recheck)
+                is UpdateState.Failed ->
+                    Triple("检查失败 · 点击重试", ToolboxColors.TextDim, recheck)
+                is UpdateState.Available ->
+                    Triple("发现新版本 v${s.version}", ToolboxColors.Accent, { showUpdateDialog = true })
+                is UpdateState.Downloading ->
+                    Triple("下载中…", ToolboxColors.Accent, { showUpdateDialog = true })
+                is UpdateState.Downloaded ->
+                    Triple("可安装 v${s.version}", ToolboxColors.Accent, { showInstallDialog = true })
+            }
+            SettingsRow(
+                title = "检查更新",
+                summary = "GitHub Releases 发布通道",
+                value = updateValue,
+                valueColor = updateColor,
+                onClick = updateClick,
+            )
             SettingsRow(
                 title = "GitHub 仓库",
                 summary = "源码 · 问题反馈",
                 value = "Toolbox-Mobile",
+                valueColor = ToolboxColors.TextDim,
                 onClick = {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPO_URL)))
                 },
@@ -177,6 +257,34 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
         },
         onDismiss = { showClearDshDialog = false },
     )
+
+    // 更新对话框：Available/Downloading/Downloaded/Failed 内容随状态切换（下载中可关掉，点行再开）
+    ToolboxUpdateDialog(
+        visible = showUpdateDialog,
+        state = updateState,
+        onDownload = startDownload,
+        onCancelDownload = { AppUpdater.cancelDownload() },
+        onInstall = {
+            (updateState as? UpdateState.Downloaded)?.let(startInstall)
+            showUpdateDialog = false
+        },
+        onDismiss = { showUpdateDialog = false },
+    )
+
+    // 可安装态点击行的安装确认（APK 已在系统下载目录，无需再下载）
+    ToolboxConfirmDialog(
+        visible = showInstallDialog,
+        title = "安装更新？",
+        message = (updateState as? UpdateState.Downloaded)
+            ?.let { "ToolboxMobile v${it.version} 已下载完成，点击安装将拉起系统安装器。" }
+            ?: "",
+        confirmText = "安装",
+        onConfirm = {
+            (updateState as? UpdateState.Downloaded)?.let(startInstall)
+            showInstallDialog = false
+        },
+        onDismiss = { showInstallDialog = false },
+    )
 }
 
 /** 分组卡片：小标题 + 圆角深色容器 */
@@ -205,7 +313,8 @@ private fun SettingsGroup(title: String, content: @Composable () -> Unit) {
 }
 
 /** 单条设置项：标题 + 摘要，右侧当前值（可点击时带 ›，onClick=null 为纯展示行）。
- *  [onValueBounds] 非空时回报右侧值文本的窗口坐标（供锚点弹层定位） */
+ *  [onValueBounds] 非空时回报右侧值文本的窗口坐标（供锚点弹层定位）；
+ *  [valueColor] 显式指定右侧值颜色（null = 默认：可点击 Accent 绿 / 纯展示 TextDim 灰） */
 @Composable
 private fun SettingsRow(
     title: String,
@@ -213,6 +322,7 @@ private fun SettingsRow(
     value: String,
     onClick: (() -> Unit)?,
     onValueBounds: ((IntRect) -> Unit)? = null,
+    valueColor: Color? = null,
 ) {
     Row(
         modifier = Modifier
@@ -230,7 +340,8 @@ private fun SettingsRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = value,
-                color = if (onClick != null) ToolboxColors.Accent else ToolboxColors.TextDim,
+                color = valueColor
+                    ?: if (onClick != null) ToolboxColors.Accent else ToolboxColors.TextDim,
                 fontSize = 13.sp,
                 modifier = if (onValueBounds != null) {
                     Modifier.onGloballyPositioned { lc ->

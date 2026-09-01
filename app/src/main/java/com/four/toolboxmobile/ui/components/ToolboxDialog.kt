@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.four.toolboxmobile.ui.theme.ToolboxColors
+import com.four.toolboxmobile.updater.AppUpdater.UpdateState
 
 /**
  * Toolbox 统一确认对话框（2026-09-01 确立，弹层体系第 2 层：确认决策类）。
@@ -49,16 +51,159 @@ fun ToolboxConfirmDialog(
     dismissText: String = "取消",
     danger: Boolean = false,
 ) {
-    var rendered by remember { mutableStateOf(visible) }
-    val progress = remember { Animatable(if (visible) 1f else 0f) }
     // 退出动画期间保留最后展示的文案（visible 已 false、调用方状态可能已清空）
     var shownTitle by remember { mutableStateOf(title) }
     var shownMessage by remember { mutableStateOf(message) }
-
-    LaunchedEffect(visible) {
+    LaunchedEffect(visible, title, message) {
         if (visible) {
             shownTitle = title
             shownMessage = message
+        }
+    }
+
+    ToolboxDialogShell(visible = visible, onDismiss = onDismiss) {
+        Text(
+            text = shownTitle,
+            color = ToolboxColors.Text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = shownMessage,
+            color = ToolboxColors.TextDim,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+        )
+        Spacer(modifier = Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ToolboxDialogButton(
+                text = dismissText,
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                primary = false,
+            )
+            ToolboxDialogButton(
+                text = confirmText,
+                onClick = onConfirm,
+                modifier = Modifier.weight(1f),
+                primary = true,
+                danger = danger,
+            )
+        }
+    }
+}
+
+/**
+ * 应用更新对话框（与确认对话框同外壳、同动效；内容随 [UpdateState] 切换）：
+ * - Available：版本 + 更新说明 + 「下载更新 / 暂不」
+ * - Downloading：SteamChat 同款细进度条 + 百分比与体积 + 「取消下载」（取消后回到 Available 视图）
+ * - Downloaded：「返回 / 安装」
+ * - Failed：错误文案 + 「重试 / 关闭」
+ * 调用方式同 ToolboxConfirmDialog：常驻组合 + visible 开关；退出期间快照最后状态。
+ */
+@Composable
+fun ToolboxUpdateDialog(
+    visible: Boolean,
+    state: UpdateState,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var shownState by remember { mutableStateOf(state) }
+    LaunchedEffect(visible, state) {
+        if (visible) shownState = state
+    }
+
+    ToolboxDialogShell(visible = visible, onDismiss = onDismiss) {
+        when (val s = shownState) {
+            is UpdateState.Available -> {
+                DialogTitle("发现新版本 v${s.version}")
+                Spacer(modifier = Modifier.height(10.dp))
+                DialogMessage(
+                    (s.notes ?: "包含最新改动与修复。") +
+                        "\n\n安装包大小：${formatMb(s.sizeBytes)} MB",
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                DialogButtons(
+                    dismissText = "暂不",
+                    confirmText = "下载更新",
+                    onDismiss = onDismiss,
+                    onConfirm = onDownload,
+                )
+            }
+            is UpdateState.Downloading -> {
+                DialogTitle("正在下载更新…")
+                Spacer(modifier = Modifier.height(16.dp))
+                LinearProgressIndicator(
+                    progress = { s.progress },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = ToolboxColors.Accent,
+                    trackColor = ToolboxColors.Bg,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                DialogMessage(
+                    "${(s.progress * 100).toInt()}%  ·  " +
+                        "${formatMb(s.doneBytes)} / ${formatMb(s.totalBytes)} MB",
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolboxDialogButton(
+                        text = "取消下载",
+                        onClick = onCancelDownload,
+                        modifier = Modifier.weight(1f),
+                        primary = false,
+                    )
+                }
+            }
+            is UpdateState.Downloaded -> {
+                DialogTitle("下载完成")
+                Spacer(modifier = Modifier.height(10.dp))
+                DialogMessage("已保存到系统下载目录：\n${s.fileName}")
+                Spacer(modifier = Modifier.height(18.dp))
+                DialogButtons(
+                    dismissText = "返回",
+                    confirmText = "安装",
+                    onDismiss = onDismiss,
+                    onConfirm = onInstall,
+                )
+            }
+            is UpdateState.Failed -> {
+                DialogTitle("更新失败")
+                Spacer(modifier = Modifier.height(10.dp))
+                DialogMessage(s.message)
+                Spacer(modifier = Modifier.height(18.dp))
+                DialogButtons(
+                    dismissText = "关闭",
+                    confirmText = "重试",
+                    onDismiss = onDismiss,
+                    onConfirm = onDownload,
+                )
+            }
+            else -> {
+                // 检查中/已最新等状态不应在此展示（打开对话框前已是 Available/Downloaded）
+                DialogTitle("检查更新")
+                Spacer(modifier = Modifier.height(10.dp))
+                DialogMessage("正在确认更新状态…")
+            }
+        }
+    }
+}
+
+/** 对话框动画外壳（2026-09-01 抽取）：常驻组合 + visible 开关，中心放大 + 失焦→对焦模糊，
+ *  退出动画播完再卸载；内容槽由调用方填充（文案快照由调用方负责） */
+@Composable
+private fun ToolboxDialogShell(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var rendered by remember { mutableStateOf(visible) }
+    val progress = remember { Animatable(if (visible) 1f else 0f) }
+
+    LaunchedEffect(visible) {
+        if (visible) {
             rendered = true
             progress.animateTo(1f, tween(ToolboxMotion.ENTER_MS, easing = ToolboxMotion.EASING))
         } else {
@@ -93,38 +238,47 @@ fun ToolboxConfirmDialog(
                 )
                 .padding(20.dp),
         ) {
-            Text(
-                text = shownTitle,
-                color = ToolboxColors.Text,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = shownMessage,
-                color = ToolboxColors.TextDim,
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-            )
-            Spacer(modifier = Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ToolboxDialogButton(
-                    text = dismissText,
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    primary = false,
-                )
-                ToolboxDialogButton(
-                    text = confirmText,
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    primary = true,
-                    danger = danger,
-                )
-            }
+            content()
         }
     }
 }
+
+@Composable
+private fun DialogTitle(text: String) {
+    Text(text = text, color = ToolboxColors.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun DialogMessage(text: String) {
+    Text(text = text, color = ToolboxColors.TextDim, fontSize = 13.sp, lineHeight = 20.sp)
+}
+
+/** 双按钮行：次按钮（描边灰）+ 主按钮（实心） */
+@Composable
+private fun DialogButtons(
+    dismissText: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ToolboxDialogButton(
+            text = dismissText,
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f),
+            primary = false,
+        )
+        ToolboxDialogButton(
+            text = confirmText,
+            onClick = onConfirm,
+            modifier = Modifier.weight(1f),
+            primary = true,
+        )
+    }
+}
+
+private fun formatMb(bytes: Long): String =
+    String.format(java.util.Locale.ROOT, "%.1f", bytes / 1048576.0)
 
 /** 对话框按钮：主按钮实心（danger 红 / 否则 Accent 绿），次按钮描边灰 */
 @Composable
