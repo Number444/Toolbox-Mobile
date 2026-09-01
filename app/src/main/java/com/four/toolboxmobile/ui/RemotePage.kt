@@ -55,9 +55,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.four.toolboxmobile.ConnUiState
-import com.four.toolboxmobile.ConfirmRequest
 import com.four.toolboxmobile.DeviceEntry
 import com.four.toolboxmobile.EventItem
 import com.four.toolboxmobile.LanScanner
@@ -65,6 +63,7 @@ import com.four.toolboxmobile.RemoteViewModel
 import com.four.toolboxmobile.ShareItem
 import com.four.toolboxmobile.SystemStatus
 import com.four.toolboxmobile.UploadItem
+import com.four.toolboxmobile.ui.components.ToolboxConfirmDialog
 import com.four.toolboxmobile.ui.theme.ToolboxColors
 import kotlin.math.roundToInt
 
@@ -181,10 +180,15 @@ fun RemotePage(viewModel: RemoteViewModel) {
         }
     }
 
-    // ===== 自绘二次确认弹窗（对齐 HTML 深色模态，不用系统原生 confirm） =====
-    confirm?.let { req ->
-        ConfirmDialog(req, onConfirm = viewModel::confirmNow, onDismiss = viewModel::dismissConfirm)
-    }
+    // ===== 统一确认弹窗（失焦→对焦质感，常驻组合 + visible 开关保证退出动画播完） =====
+    ToolboxConfirmDialog(
+        visible = confirm != null,
+        title = confirm?.title.orEmpty(),
+        message = confirm?.text.orEmpty(),
+        danger = confirm?.danger ?: true,
+        onConfirm = viewModel::confirmNow,
+        onDismiss = viewModel::dismissConfirm,
+    )
 }
 
 // ==================== 已连接面板 ====================
@@ -688,28 +692,7 @@ private fun AuthCard(
 
 // ==================== 确认弹窗 ====================
 
-/** 自绘二次确认弹窗（Toolbox 深色模态风格，对齐 HTML #confirm-box） */
-@Composable
-private fun ConfirmDialog(req: ConfirmRequest, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(ToolboxColors.Card)
-                .padding(18.dp),
-        ) {
-            Text(text = req.title, color = ToolboxColors.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(text = req.text, color = ToolboxColors.TextDim, fontSize = 13.sp)
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                DangerButton("确认", onConfirm, Modifier.weight(1f))
-                GhostButton("取消", onDismiss, Modifier.weight(1f))
-            }
-        }
-    }
-}
+// 已迁移至公共组件 ToolboxConfirmDialog（ui/components/ToolboxDialog.kt，2026-09-01 弹层体系统一）
 
 // ==================== 通用小部件 ====================
 

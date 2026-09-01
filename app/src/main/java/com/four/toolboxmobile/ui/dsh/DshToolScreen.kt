@@ -63,6 +63,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.four.toolboxmobile.DshUiState
 import com.four.toolboxmobile.DshViewModel
+import com.four.toolboxmobile.ui.components.ToolboxMotion
 import com.four.toolboxmobile.ui.theme.ToolboxColors
 
 /**
@@ -109,8 +110,12 @@ fun DshToolScreen(onClose: () -> Unit, viewModel: DshViewModel = viewModel()) {
             }
         }
 
-        // 扫码层盖在整屏之上（含顶栏）
-        if (showScanner) {
+        // 扫码层盖在整屏之上（含顶栏），覆盖层过渡（运动常量见 ToolboxMotion）
+        AnimatedVisibility(
+            visible = showScanner,
+            enter = ToolboxMotion.overlayEnter,
+            exit = ToolboxMotion.overlayExit,
+        ) {
             QrScannerView(
                 onResult = { content ->
                     showScanner = false

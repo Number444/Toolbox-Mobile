@@ -8,10 +8,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
@@ -24,11 +22,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.four.toolboxmobile.ui.BottomNavBar
 import com.four.toolboxmobile.ui.RemotePage
 import com.four.toolboxmobile.ui.SettingsPage
 import com.four.toolboxmobile.ui.ToolsPage
+import com.four.toolboxmobile.ui.components.ToolboxMotion
+import com.four.toolboxmobile.ui.components.toolboxFocusIn
 import com.four.toolboxmobile.ui.dsh.DshToolScreen
 import com.four.toolboxmobile.ui.steamchat.SteamChatToolScreen
 import com.four.toolboxmobile.ui.theme.ToolboxTheme
@@ -99,16 +100,27 @@ fun MainScreen(viewModel: RemoteViewModel = viewModel()) {
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 
-        // 工具覆盖层：从底部轻微上浮进入，退出反向滑出
+        // 工具覆盖层：从底部轻微上浮进入，退出反向滑出（运动常量见 ToolboxMotion）
         AnimatedVisibility(
             visible = activeTool != null,
-            enter = slideInVertically(initialOffsetY = { it / 10 }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it / 10 }) + fadeOut(),
+            enter = ToolboxMotion.overlayEnter,
+            exit = ToolboxMotion.overlayExit,
             modifier = Modifier.fillMaxSize(),
         ) {
-            when (activeTool) {
-                "dsh" -> DshToolScreen(onClose = { activeTool = null })
-                "steamchat" -> SteamChatToolScreen(onClose = { activeTool = null })
+            // 「失焦→对焦」10px 克制模糊（大面积层级）；WebView 掉帧则置 OVERLAY_BLUR_ENABLED = false
+            val focus by transition.animateFloat(label = "overlay-focus") {
+                if (it == EnterExitState.Visible) 1f else 0f
+            }
+            val focusMod = if (ToolboxMotion.OVERLAY_BLUR_ENABLED) {
+                Modifier.toolboxFocusIn(focus, maxBlur = 10f, cornerRadius = 0.dp, holdFraction = 0.45f)
+            } else {
+                Modifier
+            }
+            Box(modifier = Modifier.fillMaxSize().then(focusMod)) {
+                when (activeTool) {
+                    "dsh" -> DshToolScreen(onClose = { activeTool = null })
+                    "steamchat" -> SteamChatToolScreen(onClose = { activeTool = null })
+                }
             }
         }
     }

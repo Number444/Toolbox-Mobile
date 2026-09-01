@@ -8,6 +8,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.core.view.doOnLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.four.toolboxmobile.ui.components.ToolboxMotion
 import com.four.toolboxmobile.ui.dsh.DshOutlineButton
 import com.four.toolboxmobile.ui.dsh.DshPrimaryButton
 import com.four.toolboxmobile.ui.theme.ToolboxColors
@@ -285,7 +287,8 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
         // 启动遮罩：盖住 WebView 冷启动阶段，首页加载完成后淡出
         AnimatedVisibility(
             visible = maskVisible && pageError == null,
-            exit = fadeOut(animationSpec = tween(450)),
+            enter = fadeIn(tween(ToolboxMotion.ENTER_MS, easing = ToolboxMotion.EASING)),
+            exit = fadeOut(tween(ToolboxMotion.EXIT_MS, easing = ToolboxMotion.EASING)),
         ) {
             LoadingMask(
                 progress = progress,

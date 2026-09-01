@@ -1,10 +1,6 @@
 package com.four.toolboxmobile.ui.components
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -80,9 +75,9 @@ fun ToolboxDropdownPopup(
     LaunchedEffect(expanded) {
         if (expanded) {
             rendered = true
-            progress.animateTo(1f, tween(370, easing = FastOutSlowInEasing))
+            progress.animateTo(1f, tween(ToolboxMotion.ENTER_MS, easing = ToolboxMotion.EASING))
         } else {
-            progress.animateTo(0f, tween(310, easing = FastOutSlowInEasing))
+            progress.animateTo(0f, tween(ToolboxMotion.EXIT_MS, easing = ToolboxMotion.EASING))
             rendered = false
         }
     }
@@ -117,37 +112,25 @@ fun ToolboxDropdownPopup(
         properties = PopupProperties(focusable = true),
     ) {
         val p = progress.value
-        // 模糊消退进度：0 = 满模糊（前 65%），1 = 无模糊（末段）
-        val blurFade = ((p - 0.65f) / 0.35f).coerceIn(0f, 1f)
+        val stroke = focusStrokeAlpha(p) // 描边/投影随模糊同步淡入（白边来源是被模糊的浅色描边与投影）
 
         Column(
             modifier = Modifier
                 .width(width)
+                // 路径：以右上角为原点向下、向左拉伸生长（锚点弹层的空间来源）
                 .graphicsLayer {
-                    alpha = p
                     scaleX = 0.92f + 0.08f * p
                     scaleY = 0.7f + 0.3f * p
-                    transformOrigin = TransformOrigin(1f, 0f) // 右上角为原点：向下、向左拉伸
+                    transformOrigin = TransformOrigin(1f, 0f)
                     translationY = (1f - p) * -12.dp.toPx()
-                    // 模糊后硬裁剪到圆角矩形：渗出卡片轮廓的光晕被整体切掉
-                    clip = true
-                    shape = RoundedCornerShape(14.dp)
-                    // 整层模糊（背景+内容）。MIRROR 采样：边缘镜像反射内容，
-                    // 不用 CLAMP——它会把外缘像素单向拉长成白色条状边
-                    renderEffect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && p < 1f) {
-                        val r = (1f - blurFade) * 20f
-                        RenderEffect.createBlurEffect(r, r, Shader.TileMode.MIRROR).asComposeRenderEffect()
-                    } else {
-                        null
-                    }
                 }
-                // 白边来源不是模糊本身，而是被模糊的浅色描边/投影。
-                // 二者随模糊消退同步淡入：模糊期不画硬边 → 无白色条状光晕
-                .shadow(12.dp * blurFade, RoundedCornerShape(14.dp))
+                // 质感：失焦→对焦公共件（ToolboxMotion，模糊 20px，含 alpha/裁剪）
+                .toolboxFocusIn(progress = p, maxBlur = 20f, cornerRadius = 14.dp)
+                .shadow(12.dp * stroke, RoundedCornerShape(14.dp))
                 .background(ToolboxColors.Card)
                 .border(
                     width = 1.dp,
-                    color = ToolboxColors.Text.copy(alpha = 0.08f * blurFade),
+                    color = ToolboxColors.Text.copy(alpha = 0.08f * stroke),
                     shape = RoundedCornerShape(14.dp),
                 )
                 .padding(vertical = 6.dp),

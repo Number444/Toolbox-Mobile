@@ -19,9 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.four.toolboxmobile.BuildConfig
 import com.four.toolboxmobile.DshStore
 import com.four.toolboxmobile.DshViewModel
+import com.four.toolboxmobile.ui.components.ToolboxConfirmDialog
 import com.four.toolboxmobile.ui.components.ToolboxDropdownItem
 import com.four.toolboxmobile.ui.components.ToolboxDropdownPopup
 import com.four.toolboxmobile.ui.theme.ToolboxColors
@@ -164,36 +163,20 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
         )
     }
 
-    // 清除 DSH 绑定确认弹窗
-    if (showClearDshDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearDshDialog = false },
-            containerColor = ToolboxColors.Card,
-            title = { Text(text = "清除 DSH 绑定？", color = ToolboxColors.Text, fontSize = 16.sp) },
-            text = {
-                Text(
-                    text = "将删除已保存的密钥与入口地址，下次打开 DSH 远程需要重新扫码绑定。",
-                    color = ToolboxColors.TextDim,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    dshViewModel.clearBinding()
-                    dshBinding = null
-                    showClearDshDialog = false
-                }) {
-                    Text(text = "清除", color = ToolboxColors.Danger, fontSize = 14.sp)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearDshDialog = false }) {
-                    Text(text = "取消", color = ToolboxColors.TextDim, fontSize = 14.sp)
-                }
-            },
-        )
-    }
+    // 清除 DSH 绑定确认弹窗（统一组件：常驻组合 + visible 开关，退出动画才能播完）
+    ToolboxConfirmDialog(
+        visible = showClearDshDialog,
+        title = "清除 DSH 绑定？",
+        message = "将删除已保存的密钥与入口地址，下次打开 DSH 远程需要重新扫码绑定。",
+        confirmText = "清除",
+        danger = true,
+        onConfirm = {
+            dshViewModel.clearBinding()
+            dshBinding = null
+            showClearDshDialog = false
+        },
+        onDismiss = { showClearDshDialog = false },
+    )
 }
 
 /** 分组卡片：小标题 + 圆角深色容器 */
