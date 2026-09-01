@@ -32,7 +32,7 @@ import com.four.toolboxmobile.ui.theme.ToolboxColors
  * 每个工具是全屏覆盖层体验（见 MainScreen 的 activeTool），底栏被遮盖。
  */
 @Composable
-fun ToolsPage(onOpenDsh: () -> Unit) {
+fun ToolsPage(onOpenDsh: () -> Unit, onOpenSteamChat: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -55,6 +55,13 @@ fun ToolsPage(onOpenDsh: () -> Unit) {
             name = "DSH 远程",
             desc = "在同一局域网远程使用电脑上的 DeepSeek Harness",
             onClick = onOpenDsh,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        ToolEntryCard(
+            emoji = "💬",
+            name = "Steam Mchat",
+            desc = "登录 Steam 网页版，在手机上随时回复好友消息",
+            onClick = onOpenSteamChat,
         )
     }
 }

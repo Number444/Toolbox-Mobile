@@ -30,6 +30,7 @@ import com.four.toolboxmobile.ui.RemotePage
 import com.four.toolboxmobile.ui.SettingsPage
 import com.four.toolboxmobile.ui.ToolsPage
 import com.four.toolboxmobile.ui.dsh.DshToolScreen
+import com.four.toolboxmobile.ui.steamchat.SteamChatToolScreen
 import com.four.toolboxmobile.ui.theme.ToolboxTheme
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -84,7 +85,10 @@ fun MainScreen(viewModel: RemoteViewModel = viewModel()) {
         ) { page ->
             when (page) {
                 0 -> RemotePage(viewModel)
-                1 -> ToolsPage(onOpenDsh = { activeTool = "dsh" })
+                1 -> ToolsPage(
+                    onOpenDsh = { activeTool = "dsh" },
+                    onOpenSteamChat = { activeTool = "steamchat" },
+                )
                 2 -> SettingsPage()
             }
         }
@@ -104,6 +108,7 @@ fun MainScreen(viewModel: RemoteViewModel = viewModel()) {
         ) {
             when (activeTool) {
                 "dsh" -> DshToolScreen(onClose = { activeTool = null })
+                "steamchat" -> SteamChatToolScreen(onClose = { activeTool = null })
             }
         }
     }
