@@ -49,8 +49,8 @@ import com.four.toolboxmobile.ui.theme.ToolboxColors
  *
  * 视觉与动效（对齐 HyperOS 风格下拉菜单）：
  * - 锚定被点击控件右侧的值文本：弹层右上角对齐它并盖住文本
- * - 进入（470ms）：模糊（API 31+ 半径 20，前 65% 保持、末段消退）+ 渐变淡入 + 从右上角向下、向左拉伸放大
- * - 退出（410ms）：动画倒放
+ * - 进入（370ms，2026-09-01 Four 要求提速 100ms）：模糊（API 31+ 半径 20，前 65% 保持、末段消退）+ 渐变淡入 + 从右上角向下、向左拉伸放大
+ * - 退出（310ms）：动画倒放
  *
  * 用法：把调用方包在 Box 里，Popup 会自动以调用处布局为锚点——
  * ```
@@ -80,9 +80,9 @@ fun ToolboxDropdownPopup(
     LaunchedEffect(expanded) {
         if (expanded) {
             rendered = true
-            progress.animateTo(1f, tween(470, easing = FastOutSlowInEasing))
+            progress.animateTo(1f, tween(370, easing = FastOutSlowInEasing))
         } else {
-            progress.animateTo(0f, tween(410, easing = FastOutSlowInEasing))
+            progress.animateTo(0f, tween(310, easing = FastOutSlowInEasing))
             rendered = false
         }
     }

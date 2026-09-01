@@ -74,6 +74,15 @@ class DshViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = DshUiState.Unbound
     }
 
+    /** 设置页一键清除绑定：取消连接任务 + 清存储 + 立即回绑定页 */
+    fun clearBinding() {
+        job?.cancel()
+        job = null
+        _bindError.value = null
+        store.clear()
+        _state.value = DshUiState.Unbound
+    }
+
     fun retry() {
         val binding = store.load()
         if (binding == null) _state.value = DshUiState.Unbound else connect(binding)

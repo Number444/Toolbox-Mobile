@@ -39,6 +39,9 @@ class DshStore(context: Context) {
     /** 仅更新入口地址（扫描找回新入口时调用，不动密钥） */
     fun saveHost(host: String) = prefs.edit().putString("host", host).apply()
 
+    /** 一键清除绑定（设置页用）：密钥/入口/端口全清，下次打开工具回绑定页 */
+    fun clear() = prefs.edit().clear().apply()
+
     companion object {
         const val DEFAULT_PORT = 3081 // 对齐 dsh-app AppSettings.LanSharePort 默认值
     }
