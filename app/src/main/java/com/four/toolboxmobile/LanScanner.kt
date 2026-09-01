@@ -1,5 +1,9 @@
 package com.four.toolboxmobile
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -18,6 +22,11 @@ import kotlinx.coroutines.sync.withPermit
  * - 单连接超时 300ms，并发上限 64，整轮约 1 秒内完成
  * - 进度与已发现设备通过 [onProgress] 实时回调（回调发生在 IO 线程，
  *   接收方需保证线程安全——StateFlow 直接赋值是安全的）
+ * - **VPN 陷阱（2026-09-01 真机实测）**：Clash TUN 模式接管所有 TCP 连接，
+ *   裸 connect() 对网段内任意地址都被隧道应答"已连接"→ 254 台全部误判为候选。
+ *   对策：[preferWifiTransport] 把扫描套接字绑定到 Wi-Fi 网络（Network.socketFactory），
+ *   流量绕过 VPN 隧道直连局域网；同时网段前缀优先取 Wi-Fi 网卡地址
+ *   （TUN 接口的伪地址会污染 NetworkInterface 遍历结果）
  */
 object LanScanner {
 
@@ -26,8 +35,32 @@ object LanScanner {
     private const val CONCURRENCY = 64
     private const val HOSTS_PER_SUBNET = 254
 
+    /** 扫描绑定网络（通常为 Wi-Fi）；null = 系统默认路由（未调用 preferWifiTransport 或无 Wi-Fi） */
+    @Volatile private var scanNetwork: Network? = null
+
+    /** Wi-Fi 网卡的 /24 前缀（优先于接口遍历，防 VPN 伪地址污染） */
+    @Volatile private var scanPrefix: String? = null
+
+    /** 扫描前调用一次：绑定 Wi-Fi 网络并记录其网段前缀。无 Wi-Fi（纯蜂窝）时保持默认行为 */
+    fun preferWifiTransport(context: Context) {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return
+        val wifi = cm.allNetworks.firstOrNull { n ->
+            cm.getNetworkCapabilities(n)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        } ?: return
+        scanNetwork = wifi
+        val props = cm.getLinkProperties(wifi) ?: return
+        for (la in props.linkAddresses) {
+            val addr = la.address
+            if (addr is Inet4Address && !addr.isLoopbackAddress && addr.isSiteLocalAddress) {
+                scanPrefix = addr.hostAddress?.substringBeforeLast('.')
+                return
+            }
+        }
+    }
+
     /** 取本机 IPv4 的 /24 前缀（如 "192.168.1"）；无可用地址返回 null */
     fun localIpv4Prefix(): String? {
+        scanPrefix?.let { return it }
         val interfaces = NetworkInterface.getNetworkInterfaces() ?: return null
         for (iface in interfaces.toList()) {
             val usable = runCatching { iface.isUp && !iface.isLoopback }.getOrDefault(false)
@@ -70,8 +103,9 @@ object LanScanner {
         found.sortedBy { it.substringAfterLast('.').toIntOrNull() ?: Int.MAX_VALUE }
     }
 
-    /** 单个地址 TCP 连接探测：能连上即视为候选设备 */
+    /** 单个地址 TCP 连接探测：能连上即视为候选设备（绑定 scanNetwork 时绕过 VPN 隧道） */
     private fun probe(ip: String, port: Int): Boolean = runCatching {
-        Socket().use { it.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS) }
+        val socket = scanNetwork?.socketFactory?.createSocket() ?: Socket()
+        socket.use { it.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS) }
     }.isSuccess
 }

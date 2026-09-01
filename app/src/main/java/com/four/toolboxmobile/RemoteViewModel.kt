@@ -119,6 +119,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         lastProgressEmit = 0L
         _uiState.value = ConnUiState.Scanning(0, 254, null, emptyList())
         scanJob = viewModelScope.launch {
+            // VPN/TUN 会把所有 TCP 连接应答为"已连接"→ 扫描绑定 Wi-Fi 网卡绕过隧道
+            LanScanner.preferWifiTransport(getApplication())
             val prefix = LanScanner.localIpv4Prefix()
             if (prefix == null) {
                 _uiState.value = ConnUiState.Error("未获取到本机 IPv4 地址，请检查网络连接")

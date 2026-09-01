@@ -103,6 +103,8 @@ class DshViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             // 2. 遍历本机 IPv4 所在 /24 网段找入口（TCP 预筛 → 门禁探测确认）
+            // VPN/TUN 会把所有 TCP 连接应答为"已连接"→ 扫描绑定 Wi-Fi 网卡绕过隧道
+            LanScanner.preferWifiTransport(getApplication())
             val prefix = LanScanner.localIpv4Prefix()
             if (prefix == null) {
                 _state.value = DshUiState.Error("手机未连接到局域网")

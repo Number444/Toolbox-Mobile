@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -41,7 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -49,8 +52,10 @@ import androidx.core.view.doOnLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.four.toolboxmobile.ui.dsh.DshOutlineButton
 import com.four.toolboxmobile.ui.dsh.DshPrimaryButton
 import com.four.toolboxmobile.ui.theme.ToolboxColors
+import kotlinx.coroutines.delay
 
 private const val STEAM_CHAT_URL = "https://steamcommunity.com/chat/"
 
@@ -119,6 +124,24 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
     var pageError by remember { mutableStateOf<String?>(null) }
     // 启动遮罩：首页首次加载完成后淡出；顶栏刷新时重新出现
     var maskVisible by remember { mutableStateOf(true) }
+    // 加载看门狗状态：每次加载开始 +1（重启 12s 计时）；slowHint = 超时提示可见
+    var loadSession by remember { mutableIntStateOf(0) }
+    var slowHint by remember { mutableStateOf(false) }
+
+    // 移动化补丁 v7-lite（assets/steamchat/mobile.js）：只隐藏 Steam 顶部横栏。
+    // 安全红线：脚本内只改已有元素 inline style，零节点增删（灰屏事故定案）
+    val context = LocalContext.current
+    val patchJs = remember {
+        runCatching {
+            context.assets.open("steamchat/mobile.js").bufferedReader().use { it.readText() }
+        }.getOrNull()
+    }
+
+    /** 注入补丁（幂等，脚本内有 __mchatPatch 守卫） */
+    fun injectPatch(view: WebView) {
+        val js = patchJs ?: return
+        view.evaluateJavascript(js, null)
+    }
 
     BackHandler {
         val wv = webView
@@ -143,8 +166,19 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
         if (reloadTick > 0) {
             maskVisible = true
             progress = 0
+            loadSession++
             webView?.reload()
         }
+    }
+
+    // 加载看门狗：不赌 Chromium 错误回调（GFW 静默丢包时可能永不触发），
+    // 改为确定性超时——真实页面 12 秒未加载完，遮罩上给代理提示与重试入口
+    LaunchedEffect(loadSession) {
+        if (loadSession == 0) return@LaunchedEffect
+        slowHint = false
+        delay(12_000)
+        // 读的是 State 的当前值：已完成/已报错则不打扰
+        if (maskVisible && pageError == null) slowHint = true
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -176,13 +210,28 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
                             error: WebResourceError,
                         ) {
                             if (request.isForMainFrame) {
-                                pageError = "页面加载失败（错误码 ${error.errorCode}）\n请检查网络后重试"
+                                pageError = when (error.errorCode) {
+                                    // steamcommunity.com 国内被阻断：连接类错误给明确指引
+                                    ERROR_CONNECT, ERROR_TIMEOUT, ERROR_HOST_LOOKUP ->
+                                        "无法连接 Steam 社区\n该域名在国内无法直连，请开启代理/VPN 后点下方重试"
+                                    else ->
+                                        "页面加载失败（错误码 ${error.errorCode}）\n请检查网络后重试"
+                                }
                             }
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
-                            pageError = null
-                            maskVisible = false // 首页加载完成 → 遮罩淡出
+                            // chrome-error:// 是 Chromium 自己的错误页：它的"加载完成"
+                            // 不能清掉我们的错误层，否则自绘错误提示永远被它盖住
+                            if (!url.startsWith("chrome-error://")) {
+                                pageError = null
+                                slowHint = false
+                                maskVisible = false // 首页加载完成 → 遮罩淡出
+                                // 只对 Steam 域注入补丁（含登录跳转后的每次完整加载）
+                                if (url.startsWith("https://steamcommunity.com")) {
+                                    injectPatch(view)
+                                }
+                            }
                         }
                     }
                     webChromeClient = object : android.webkit.WebChromeClient() {
@@ -195,6 +244,7 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
                     doOnLayout {
                         if (!loaded && it.width > 0 && it.height > 0) {
                             loaded = true
+                            loadSession++ // 启动加载看门狗
                             loadUrl(STEAM_CHAT_URL)
                         }
                     }
@@ -224,6 +274,7 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
                         pageError = null
                         maskVisible = true
                         progress = 0
+                        loadSession++
                         webView?.reload()
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -236,14 +287,33 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
             visible = maskVisible && pageError == null,
             exit = fadeOut(animationSpec = tween(450)),
         ) {
-            LoadingMask(progress = progress)
+            LoadingMask(
+                progress = progress,
+                slowHint = slowHint,
+                onRetry = {
+                    slowHint = false
+                    progress = 0
+                    loadSession++
+                    webView?.reload()
+                },
+                onKeepWaiting = {
+                    // 继续等：收起提示并再给看门狗 12 秒（之后仍不通会再次提示）
+                    slowHint = false
+                    loadSession++
+                },
+            )
         }
     }
 }
 
-/** 启动加载遮罩：Steam 标识 + 环形指示 + 实时百分比 + 进度条 */
+/** 启动加载遮罩：Steam 标识 + 环形指示 + 实时百分比 + 进度条；超时时给代理提示 */
 @Composable
-private fun LoadingMask(progress: Int) {
+private fun LoadingMask(
+    progress: Int,
+    slowHint: Boolean,
+    onRetry: () -> Unit,
+    onKeepWaiting: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize().background(ToolboxColors.Bg).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -282,5 +352,38 @@ private fun LoadingMask(progress: Int) {
             color = ToolboxColors.TextDim,
             fontSize = 12.sp,
         )
+
+        // 看门狗超时：12 秒未完成加载 → 代理指引（GFW 阻断可能永不报错，必须主动提示）
+        if (slowHint) {
+            Spacer(modifier = Modifier.height(28.dp))
+            Text(
+                text = "加载时间有点长…",
+                color = ToolboxColors.Warning,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Steam 社区在国内无法直连\n请确认代理 / VPN 已开启",
+                color = ToolboxColors.TextDim,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            Row(modifier = Modifier.fillMaxWidth(0.8f)) {
+                DshOutlineButton(
+                    text = "继续等待",
+                    onClick = onKeepWaiting,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                DshPrimaryButton(
+                    text = "重试",
+                    onClick = onRetry,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
     }
 }

@@ -425,7 +425,9 @@ private fun DshWebView(url: String, reloadTick: Int, onClose: () -> Unit) {
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
-                            pageError = null
+                            // chrome-error:// 是 Chromium 自己的错误页：它的"加载完成"
+                            // 不能清掉我们的错误层，否则自绘错误提示永远被它盖住
+                            if (!url.startsWith("chrome-error://")) pageError = null
                         }
                     }
                     webChromeClient = object : android.webkit.WebChromeClient() {
