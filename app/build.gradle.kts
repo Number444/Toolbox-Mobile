@@ -12,8 +12,8 @@ android {
         applicationId = "com.four.toolboxmobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.3.1"
     }
 
     // Release 签名：密钥库在仓库根目录（git 忽略），密码在 ~/.gradle/gradle.properties
