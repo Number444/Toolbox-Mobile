@@ -106,6 +106,7 @@ fun DshToolScreen(onClose: () -> Unit, viewModel: DshViewModel = viewModel()) {
                         url = s.url,
                         reloadTick = reloadTick,
                         onClose = onClose,
+                        onDeviceUrl = viewModel::onDeviceUrlCaptured,
                     )
                 }
             }
@@ -203,10 +204,19 @@ private fun BindView(viewModel: DshViewModel, onScanQr: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "在电脑端 dsh-app 设置页开启「局域网共享」\n扫码或输入访问地址，即可在手机上远程使用",
+            text = "在电脑端 DSH 侧栏点 📱 打开「远程访问」面板\n扫码或粘贴配对链接，即可在手机上远程使用",
             color = ToolboxColors.TextDim,
             fontSize = 12.5.sp,
             lineHeight = 19.sp,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        // 插件前提提醒（2026-09-06 Four 要求：连接时提示需装对应插件）
+        Text(
+            text = "前提：电脑端已安装 dsh-remote-web-ui 插件\n并开启局域网访问",
+            color = ToolboxColors.TextDim,
+            fontSize = 11.5.sp,
+            lineHeight = 17.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(32.dp))
@@ -231,7 +241,7 @@ private fun BindView(viewModel: DshViewModel, onScanQr: () -> Unit) {
                     onValueChange = { input = it },
                     placeholder = {
                         Text(
-                            text = "http://192.168.1.7:3081/?key=…",
+                            text = "http://192.168.5.12:3080/pair-accept?pair=…",
                             fontSize = 13.sp,
                         )
                     },
@@ -352,7 +362,12 @@ private fun ErrorView(
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun DshWebView(url: String, reloadTick: Int, onClose: () -> Unit) {
+private fun DshWebView(
+    url: String,
+    reloadTick: Int,
+    onClose: () -> Unit,
+    onDeviceUrl: (String) -> Unit,
+) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var pageError by remember { mutableStateOf<String?>(null) }
@@ -422,20 +437,53 @@ private fun DshWebView(url: String, reloadTick: Int, onClose: () -> Unit) {
                         displayZoomControls = false
                     }
                     this.webViewClient = object : WebViewClient() {
+                        // 主框架本次导航是否失败：HTTP 错误页也会触发 onPageFinished，
+                        // 不加标志会被它立刻把错误层清掉
+                        var loadFailed = false
+
+                        override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                            loadFailed = false
+                            // 配对链路 303 跳到 /pair-app?device=… → 捕获为「设备书签」持久化，
+                            // 之后打开工具直接加载它进 GUI（纯 HTTP 下导航 / 会撞 harness 401）
+                            if (url != null && "/pair-app" in url && "device=" in url) {
+                                onDeviceUrl(url)
+                            }
+                            super.onPageStarted(view, url, favicon)
+                        }
+
                         override fun onReceivedError(
                             view: WebView,
                             request: WebResourceRequest,
                             error: WebResourceError,
                         ) {
                             if (request.isForMainFrame) {
+                                loadFailed = true
                                 pageError = "页面加载失败（错误码 ${error.errorCode}）"
+                            }
+                        }
+
+                        override fun onReceivedHttpError(
+                            view: WebView,
+                            request: WebResourceRequest,
+                            errorResponse: android.webkit.WebResourceResponse,
+                        ) {
+                            // 配对路径 404 = 电脑端没装 dsh-remote-web-ui 插件（或 harness 版本过低），
+                            // 给出针对性提醒而不是裸错误码（2026-09-06 Four 要求）
+                            if (request.isForMainFrame && errorResponse.statusCode == 404) {
+                                loadFailed = true
+                                val path = request.url?.path.orEmpty()
+                                pageError = if (path.startsWith("/pair-")) {
+                                    "电脑端没有找到配对服务（HTTP 404）\n请确认已安装 dsh-remote-web-ui 插件并开启局域网访问"
+                                } else {
+                                    "页面不存在（HTTP 404）"
+                                }
                             }
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
                             // chrome-error:// 是 Chromium 自己的错误页：它的"加载完成"
                             // 不能清掉我们的错误层，否则自绘错误提示永远被它盖住
-                            if (!url.startsWith("chrome-error://")) pageError = null
+                            if (!url.startsWith("chrome-error://") && !loadFailed) pageError = null
                         }
                     }
                     webChromeClient = object : android.webkit.WebChromeClient() {

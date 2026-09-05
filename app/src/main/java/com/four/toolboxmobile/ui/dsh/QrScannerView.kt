@@ -64,7 +64,7 @@ private val CornerArm: Dp = 26.dp
 
 /**
  * 扫码绑定层：CameraX 预览 + ML Kit 二维码识别（仅 QR 格式）。
- * 识别到首个二维码即回调 onResult（内容为 dsh-app 设置页的完整访问地址）。
+ * 识别到首个二维码即回调 onResult（内容为 DSH 远程访问面板的配对链接）。
  */
 @Composable
 fun QrScannerView(onResult: (String) -> Unit, onCancel: () -> Unit) {
@@ -183,7 +183,7 @@ private fun CameraPreview(onResult: (String) -> Unit, onCancel: () -> Unit) {
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         ScannerOverlay()
         Text(
-            text = "对准 dsh-app 设置页「局域网共享」的二维码",
+            text = "对准 DSH「远程访问」面板的二维码",
             color = ToolboxColors.Text,
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
