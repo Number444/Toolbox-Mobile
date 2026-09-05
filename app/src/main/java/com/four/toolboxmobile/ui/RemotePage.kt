@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.four.toolboxmobile.ConnUiState
@@ -99,6 +100,10 @@ fun RemotePage(viewModel: RemoteViewModel) {
                 color = ToolboxColors.Text,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
+                // 2026-09-06：长 IP 时「已连接」徽标会把标题挤出屏幕——标题让位、单行省略
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
             ConnBadge(state)
         }
@@ -372,6 +377,8 @@ private fun UploadRow(u: UploadItem) {
             text = "⬆ ${u.name}${if (u.sizeText.isNotEmpty()) " · ${u.sizeText}" else ""}",
             color = ToolboxColors.Text,
             fontSize = 12.sp,
+            maxLines = 1, // 长文件名单行省略，右侧进度不被挤没（2026-09-06）
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
         Text(
@@ -432,6 +439,8 @@ private fun DeviceRow(d: DeviceEntry, onKick: () -> Unit) {
             text = "${if (d.online) "🟢" else "⚪"} ${d.name} · ${d.ip} · ${d.subtitle}",
             color = ToolboxColors.TextDim,
             fontSize = 12.sp,
+            maxLines = 1, // 设备名/IP 过长时单行省略，不挤压「踢出」按钮（2026-09-06）
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -538,7 +547,14 @@ private fun ConnBadge(state: ConnUiState) {
                 .background(dotColor),
         )
         Spacer(modifier = Modifier.width(6.dp))
-        Text(text = label, color = dotColor, fontSize = 12.sp)
+        // 单行省略：长 IP（IPv6 / 主机名）不再撑破顶栏（2026-09-06）
+        Text(
+            text = label,
+            color = dotColor,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -698,7 +714,15 @@ private fun AuthCard(
 
 @Composable
 private fun CardTitle(text: String) {
-    Text(text = text, color = ToolboxColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    // 单行省略：标题可能拼接 IP（系统状态卡），长 IP 不撑破卡片（2026-09-06）
+    Text(
+        text = text,
+        color = ToolboxColors.Text,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
     Spacer(modifier = Modifier.height(10.dp))
 }
 

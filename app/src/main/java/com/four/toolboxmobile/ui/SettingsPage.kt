@@ -76,7 +76,8 @@ private val PAGE_NAMES = listOf("远程连接", "工具", "设置")
 fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
-    val dshStore = remember { DshStore(context) }
+    // ===== DSH 绑定相关：2026-09-06 应 Four 要求随 DSH 工具一同屏蔽（保留原代码，仅注释） =====
+    // val dshStore = remember { DshStore(context) }
 
     var defaultPage by remember { mutableStateOf(prefs.getInt(KEY_DEFAULT_PAGE, 1).coerceIn(0, 2)) }
     var showPageDialog by remember { mutableStateOf(false) }
@@ -84,10 +85,10 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
     // DSH 绑定展示态：与工具内 ViewModel（Activity 级）共享同一实例，清除即全局生效。
     // 监听其状态跃迁刷新展示——首次在工具里绑定成功（Unbound→Searching→Connected）
     // 后切回本页也能立即看到新绑定，不靠重建页面
-    var dshBinding by remember { mutableStateOf(dshStore.load()) }
-    val dshState by dshViewModel.state.collectAsState()
-    LaunchedEffect(dshState) { dshBinding = dshStore.load() }
-    var showClearDshDialog by remember { mutableStateOf(false) }
+    // var dshBinding by remember { mutableStateOf(dshStore.load()) }
+    // val dshState by dshViewModel.state.collectAsState()
+    // LaunchedEffect(dshState) { dshBinding = dshStore.load() }
+    // var showClearDshDialog by remember { mutableStateOf(false) }
 
     // 应用内更新：进入设置页自动检查一次；点击行/对话框驱动后续动作
     val coroutineScope = rememberCoroutineScope()
@@ -180,15 +181,15 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
             }
         }
 
-        // ===== 工具分组 =====
-        SettingsGroup(title = "工具") {
-            SettingsRow(
-                title = "DSH 绑定",
-                summary = "远程工具记住的访问密钥与入口",
-                value = dshBinding?.let { b -> "${b.host ?: "未连接过"}:${b.port}" } ?: "未绑定",
-                onClick = if (dshBinding != null) ({ showClearDshDialog = true }) else null,
-            )
-        }
+        // ===== 工具分组：2026-09-06 应 Four 要求随 DSH 工具一同屏蔽（保留原代码，仅注释） =====
+        // SettingsGroup(title = "工具") {
+        //     SettingsRow(
+        //         title = "DSH 绑定",
+        //         summary = "远程工具记住的访问密钥与入口",
+        //         value = dshBinding?.let { b -> "${b.host ?: "未连接过"}:${b.port}" } ?: "未绑定",
+        //         onClick = if (dshBinding != null) ({ showClearDshDialog = true }) else null,
+        //     )
+        // }
 
         // ===== 关于分组 =====
         SettingsGroup(title = "关于") {
@@ -243,20 +244,20 @@ fun SettingsPage(dshViewModel: DshViewModel = viewModel()) {
         )
     }
 
-    // 清除 DSH 绑定确认弹窗（统一组件：常驻组合 + visible 开关，退出动画才能播完）
-    ToolboxConfirmDialog(
-        visible = showClearDshDialog,
-        title = "清除 DSH 绑定？",
-        message = "将删除已保存的密钥与入口地址，下次打开 DSH 远程需要重新扫码绑定。",
-        confirmText = "清除",
-        danger = true,
-        onConfirm = {
-            dshViewModel.clearBinding()
-            dshBinding = null
-            showClearDshDialog = false
-        },
-        onDismiss = { showClearDshDialog = false },
-    )
+    // 清除 DSH 绑定确认弹窗（2026-09-06 随 DSH 工具一同屏蔽，保留原代码仅注释）
+    // ToolboxConfirmDialog(
+    //     visible = showClearDshDialog,
+    //     title = "清除 DSH 绑定？",
+    //     message = "将删除已保存的密钥与入口地址，下次打开 DSH 远程需要重新扫码绑定。",
+    //     confirmText = "清除",
+    //     danger = true,
+    //     onConfirm = {
+    //         dshViewModel.clearBinding()
+    //         dshBinding = null
+    //         showClearDshDialog = false
+    //     },
+    //     onDismiss = { showClearDshDialog = false },
+    // )
 
     // 更新对话框：Available/Downloading/Downloaded/Failed 内容随状态切换（下载中可关掉，点行再开）
     ToolboxUpdateDialog(

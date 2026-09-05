@@ -45,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -355,6 +356,8 @@ private fun DshWebView(url: String, reloadTick: Int, onClose: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var pageError by remember { mutableStateOf<String?>(null) }
+    // 配置变更（旋转等）重建后恢复网页状态：saveState/restoreState 保住页面与后退栈（2026-09-06 修复）
+    val webViewState = rememberSaveable { android.os.Bundle() }
 
     BackHandler {
         val wv = webView
@@ -447,13 +450,16 @@ private fun DshWebView(url: String, reloadTick: Int, onClose: () -> Unit) {
                     doOnLayout {
                         if (!loaded && it.width > 0 && it.height > 0) {
                             loaded = true
-                            loadUrl(url)
+                            // 有存档（配置变更重建）→ 恢复页面与后退栈；否则冷启动加载
+                            if (webViewState.isEmpty) loadUrl(url)
+                            else restoreState(webViewState)
                         }
                     }
                     webView = this
                 }
             },
             onRelease = {
+                runCatching { it.saveState(webViewState) }
                 it.destroy()
                 webView = null
             },

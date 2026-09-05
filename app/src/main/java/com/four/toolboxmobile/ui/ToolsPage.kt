@@ -50,13 +50,15 @@ fun ToolsPage(onOpenDsh: () -> Unit, onOpenSteamChat: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        ToolEntryCard(
-            emoji = "🛰️",
-            name = "DSH 远程",
-            desc = "在同一局域网远程使用电脑上的 DeepSeek Harness",
-            onClick = onOpenDsh,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        // ===== DSH 远程工具：2026-09-06 应 Four 要求暂时屏蔽（保留原代码，仅注释入口，
+        //       恢复时取消注释即可；DshToolScreen/DshViewModel 等实现代码保持原样） =====
+        // ToolEntryCard(
+        //     emoji = "🛰️",
+        //     name = "DSH 远程",
+        //     desc = "在同一局域网远程使用电脑上的 DeepSeek Harness",
+        //     onClick = onOpenDsh,
+        // )
+        // Spacer(modifier = Modifier.height(12.dp))
         ToolEntryCard(
             emoji = "💬",
             name = "Steam Mchat",

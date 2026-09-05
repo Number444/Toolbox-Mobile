@@ -87,7 +87,7 @@ dependencies {
 tasks.register<Copy>("exportReleaseApk") {
     val versionName = android.defaultConfig.versionName
     from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
-    into("C:/Agent Space/ToolboxMobile-Releases")
+    into("D:/Agent Space/ToolboxMobile-Releases")
     rename { "ToolboxMobile-v$versionName-release.apk" }
 }
 tasks.matching { it.name == "assembleRelease" }.configureEach {

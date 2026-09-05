@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,6 +125,9 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var pageError by remember { mutableStateOf<String?>(null) }
+    // 配置变更（旋转等）重建后恢复网页状态：Bundle 可 saveable，
+    // saveState/restoreState 保住当前页与后退栈，不再冷启动重载（2026-09-06 修复）
+    val webViewState = rememberSaveable { android.os.Bundle() }
     // 启动遮罩：首页首次加载完成后淡出；顶栏刷新时重新出现
     var maskVisible by remember { mutableStateOf(true) }
     // 加载看门狗状态：每次加载开始 +1（重启 12s 计时）；slowHint = 超时提示可见
@@ -247,13 +251,16 @@ private fun SteamChatWebView(reloadTick: Int, onClose: () -> Unit) {
                         if (!loaded && it.width > 0 && it.height > 0) {
                             loaded = true
                             loadSession++ // 启动加载看门狗
-                            loadUrl(STEAM_CHAT_URL)
+                            // 有存档（配置变更重建）→ 恢复页面与后退栈；否则冷启动加载
+                            if (webViewState.isEmpty) loadUrl(STEAM_CHAT_URL)
+                            else restoreState(webViewState)
                         }
                     }
                     webView = this
                 }
             },
             onRelease = {
+                runCatching { it.saveState(webViewState) }
                 it.destroy()
                 webView = null
             },

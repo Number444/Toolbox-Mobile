@@ -129,15 +129,26 @@ private fun CameraPreview(onResult: (String) -> Unit, onCancel: () -> Unit) {
             BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build(),
         )
         val executor = ContextCompat.getMainExecutor(context)
+        // ML Kit 逐帧推理耗时，单独后台线程跑分析器，不阻塞 UI（2026-09-06 修复）
+        val analysisExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        // 销毁早于 providerFuture 就绪的竞态：秒退扫码页后 listener 仍会触发，
+        // 不加标志会把相机 bindToLifecycle 常驻泄漏（指示灯常亮）（2026-09-06 修复）
+        val disposed = AtomicBoolean(false)
         providerFuture.addListener({
-            val provider = providerFuture.get()
+            // CameraX 初始化失败（无相机/被占用）时 get() 抛 ExecutionException，
+            // 不兜住会从主线程 listener 直接崩溃（2026-09-06 修复）
+            val provider = runCatching { providerFuture.get() }.getOrNull() ?: return@addListener
+            if (disposed.get()) {
+                runCatching { provider.unbindAll() }
+                return@addListener
+            }
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-            analysis.setAnalyzer(executor) { proxy ->
+            analysis.setAnalyzer(analysisExecutor) { proxy ->
                 val media = proxy.image
                 if (media == null || detected.get()) {
                     proxy.close()
@@ -161,8 +172,10 @@ private fun CameraPreview(onResult: (String) -> Unit, onCancel: () -> Unit) {
             }
         }, executor)
         onDispose {
+            disposed.set(true)
             if (providerFuture.isDone) runCatching { providerFuture.get().unbindAll() }
             scanner.close()
+            analysisExecutor.shutdown()
         }
     }
 

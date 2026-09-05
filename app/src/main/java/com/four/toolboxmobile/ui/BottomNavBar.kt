@@ -103,6 +103,16 @@ fun BottomNavBar(
             derivedStateOf { position.value.roundToInt().coerceIn(0, pageCount - 1) }
         }
 
+        // 松手 / 取消后的统一吸附：页面与绿框各自归位到最近页。
+        // 绿框必须自己也播吸附动画——若页面本就停在目标页（拖动未跨过切换阈值），
+        // pager 不滚动 → snapshotFlow 不产生新值 → 没人把绿框从半路拉回来
+        //（2026-09-06 修复「快速拖动后绿框卡半路」的根因）
+        val settleToNearest: () -> Unit = {
+            val target = position.value.roundToInt().coerceIn(0, pageCount - 1)
+            scope.launch { pagerState.animateScrollToPage(target) }
+            scope.launch { position.animateTo(target.toFloat(), tween(180)) }
+        }
+
         // 移动中（拖动 / 页面滚动 / 吸附动画进行中）→ 绿框放大 10%
         val moving = dragging || pagerState.isScrollInProgress || position.isRunning
         val frameScale by animateFloatAsState(
@@ -206,16 +216,25 @@ fun BottomNavBar(
                                 change.consume()
                                 val next = (position.value + dragAmount.x / itemWidthPx)
                                     .coerceIn(0f, (pageCount - 1).toFloat())
-                                scope.launch { position.snapTo(next) }
+                                scope.launch {
+                                    position.snapTo(next)
+                                    // 页面随绿框实时移动：松手时 pager 已在目标位置附近，
+                                    // 只补播残余的吸附小段，不会从头再播一遍滑动动画
+                                    //（2026-09-06 修复「拖动切换重复播放动画」的根因）
+                                    val page = next.roundToInt().coerceIn(0, pageCount - 1)
+                                    pagerState.scrollToPage(
+                                        page,
+                                        (next - page).coerceIn(-0.5f, 0.5f),
+                                    )
+                                }
                             },
                             onDragEnd = {
                                 dragging = false
-                                val target = position.value.roundToInt().coerceIn(0, pageCount - 1)
-                                scope.launch { pagerState.animateScrollToPage(target) }
+                                settleToNearest()
                             },
                             onDragCancel = {
                                 dragging = false
-                                scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) }
+                                settleToNearest()
                             },
                         )
                     },

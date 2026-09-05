@@ -108,7 +108,10 @@ object AppUpdater {
         if (!force && _state.value !is UpdateState.Idle) return
         if (!runLock.tryLock()) return
         try {
-            cleanupParts(context)
+            // cleanupParts（文件 IO）与后续 findDownloadedApk（MediaStore binder 查询）
+            // 是磁盘/IPC 操作，而调用方可能在主线程（设置页 LaunchedEffect）——整体切 IO（2026-09-06 修复）
+            withContext(Dispatchers.IO) {
+                cleanupParts(context)
             _state.value = UpdateState.Checking
             when (val fetch = fetchRelease()) {
                 // 网络/HTTP 失败不清 latest*：已知的更新仍可经「重试」下载（瞬断不丢已查到的结果）
@@ -126,6 +129,7 @@ object AppUpdater {
                     _state.value = UpdateState.UpToDate
                 }
                 is FetchResult.Ok -> handleReleaseJson(context, fetch.json)
+            }
             }
         } finally {
             runLock.unlock()
@@ -269,6 +273,9 @@ object AppUpdater {
 
     private suspend fun doDownload(context: Context) {
         runLock.withLock {
+            // 锁内复查：download() 的锁外「下载中忽略」检查与 Downloading 置位之间有时间窗，
+            // 连点两次会让第二次排队整包重下（2026-09-06 修复）
+            if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Downloaded) return
             // 快照必须在锁内读取：与 force check() 的 latest* 写入互斥，防撕裂（🔴 审查修复）
             val url = latestUrl ?: return
             val version = latestVersion ?: return

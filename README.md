@@ -22,7 +22,7 @@ Windows 桌面应用 [Toolbox](https://github.com/Number444) 的 Android 伴侣�
 .\gradlew assembleRelease      # 正式包（需签名配置，见下）
 ```
 
-release 构建后 APK 自动导出到 `C:\Agent Space\ToolboxMobile-Releases\`。
+release 构建后 APK 自动导出到 `D:\Agent Space\ToolboxMobile-Releases\`。
 
 ### 签名
 
