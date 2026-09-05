@@ -30,6 +30,9 @@ class DshStore(context: Context) {
 
     fun saveDeviceUrl(url: String) = prefs.edit().putString("device_url", url).apply()
 
+    /** 仅清除设备书签（书签失效回退配对链接时用，保留配对链接可自动重配） */
+    fun clearDeviceUrl() = prefs.edit().remove("device_url").apply()
+
     /** 一键清除绑定（设置页用）：配对链接与设备书签全清，下次打开工具回绑定页 */
     fun clear() = prefs.edit().clear().apply()
 
@@ -87,10 +90,12 @@ fun parseBindingInput(raw: String): BindingParse {
             "这不是配对链接。请在电脑端 DSH 侧栏点 📱 打开远程访问面板，扫描其中的二维码。\n$DSH_PLUGIN_HINT",
         )
     }
-    // 归一化重建：只保留 scheme/host/port + 配对路径与令牌，丢弃多余路径与参数
-    val scheme = uri.scheme?.takeIf { it.isNotBlank() } ?: "http"
+    // 归一化重建：只保留 scheme/host/port + 配对路径与令牌，丢弃多余路径与参数。
+    // getQueryParameter 返回的是已解码值，拼回 URL 必须重新编码（令牌含 %26/%23 等会截断）；
+    // scheme 白名单防 javascript:/file: 伪协议输入（2026-09-06 审查修复）
+    val scheme = uri.scheme?.lowercase()?.takeIf { it == "http" || it == "https" } ?: "http"
     val portPart = if (uri.port > 0) ":${uri.port}" else ""
-    return BindingParse.Pairing("$scheme://$host$portPart/pair-accept?pair=$pairToken")
+    return BindingParse.Pairing("$scheme://$host$portPart/pair-accept?pair=${Uri.encode(pairToken)}")
 }
 
 /* ===== 旧 dsh-app 协议（2026-09-06 起停用，保留备查）=====

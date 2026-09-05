@@ -83,6 +83,21 @@ class DshViewModel(app: Application) : AndroidViewModel(app) {
         store.saveDeviceUrl(url)
     }
 
+    /**
+     * 设备书签失效（服务端会话被清，/pair-app 返回 200 失效页——不是 404，由 DshWebView
+     * 检测标题特征回调）：清掉死书签，回退配对链接自动重配（令牌有效期内可重复配对）；
+     * 配对链接也没了 → 回绑定页（2026-09-06 审查修复）
+     */
+    fun onBookmarkDead() {
+        store.clearDeviceUrl()
+        val pairingUrl = store.loadPairingUrl()
+        _state.value = if (pairingUrl != null) {
+            DshUiState.Connected.fromUrl(pairingUrl)
+        } else {
+            DshUiState.Unbound
+        }
+    }
+
     /** 重新配对：清掉旧绑定（含设备书签），回绑定页 */
     fun rebind() {
         _bindError.value = null

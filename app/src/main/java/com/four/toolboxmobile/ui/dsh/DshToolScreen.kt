@@ -42,6 +42,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,12 +103,17 @@ fun DshToolScreen(onClose: () -> Unit, viewModel: DshViewModel = viewModel()) {
                         onRetry = { viewModel.retry() },
                         onRebind = { viewModel.rebind() },
                     )
-                    is DshUiState.Connected -> DshWebView(
-                        url = s.url,
-                        reloadTick = reloadTick,
-                        onClose = onClose,
-                        onDeviceUrl = viewModel::onDeviceUrlCaptured,
-                    )
+                    is DshUiState.Connected -> key(s.url) {
+                        // key(s.url)：URL 变化（如死书签回退配对链接）整体重建 WebView 容器，
+                        // 否则 AndroidView 工厂只跑一次，新 URL 永远不会被加载（2026-09-06 审查修复）
+                        DshWebView(
+                            url = s.url,
+                            reloadTick = reloadTick,
+                            onClose = onClose,
+                            onDeviceUrl = viewModel::onDeviceUrlCaptured,
+                            onBookmarkDead = viewModel::onBookmarkDead,
+                        )
+                    }
                 }
             }
         }
@@ -367,12 +373,15 @@ private fun DshWebView(
     reloadTick: Int,
     onClose: () -> Unit,
     onDeviceUrl: (String) -> Unit,
+    onBookmarkDead: () -> Unit,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableIntStateOf(0) }
     var pageError by remember { mutableStateOf<String?>(null) }
-    // 配置变更（旋转等）重建后恢复网页状态：saveState/restoreState 保住页面与后退栈（2026-09-06 修复）
-    val webViewState = rememberSaveable { android.os.Bundle() }
+    // 配置变更（旋转等）重建后恢复网页状态：saveState/restoreState 保住页面与后退栈（2026-09-06 修复）。
+    // 存档以 url 为键：换 URL（重新绑定配对新电脑）必须拿到空存档走 loadUrl，
+    // 否则会 restoreState 出旧电脑页面、新配对链永远不进（2026-09-06 审查修复）
+    val webViewState = rememberSaveable(url) { android.os.Bundle() }
 
     BackHandler {
         val wv = webView
@@ -484,6 +493,16 @@ private fun DshWebView(
                             // chrome-error:// 是 Chromium 自己的错误页：它的"加载完成"
                             // 不能清掉我们的错误层，否则自绘错误提示永远被它盖住
                             if (!url.startsWith("chrome-error://") && !loadFailed) pageError = null
+                            // 死书签回退：/pair-app 上设备会话失效时服务端返回 200 + 双语失效页
+                            //（不是 404，routes.ts pairingFailurePage），检测标题特征 →
+                            // 清掉死书签回退配对链接自动重配（2026-09-06 审查修复）
+                            if ("/pair-app" in url && !loadFailed) {
+                                view.evaluateJavascript("document.title") { title ->
+                                    if (title?.contains("Pairing link invalid") == true) {
+                                        onBookmarkDead()
+                                    }
+                                }
+                            }
                         }
                     }
                     webChromeClient = object : android.webkit.WebChromeClient() {
